@@ -23,8 +23,7 @@ app.use(express.json());
 
 // ======================================================
 // BOT /start
-
-    bot.start(async (ctx) => {
+bot.start(async (ctx) => {
   const chatId = ctx.chat.id;
 
   try {
@@ -54,9 +53,9 @@ app.use(express.json());
     await ctx.reply("Selecione um plano:", {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "Plano 1 💎", callback_data: "plano1" }],
-          [{ text: "Plano 2 🔥", callback_data: "plano2" }],
-          [{ text: "Plano 3 🚀", callback_data: "plano3" }]
+          [{ text: "Plano Semanal", callback_data: "plano1" }],
+          [{ text: "Plano Mensal", callback_data: "plano2" }],
+          [{ text: "Plano Vitalício", callback_data: "plano3" }]
         ]
       }
     });
@@ -66,8 +65,9 @@ app.use(express.json());
   }
 });
 
+
 // ======================================================
-bot.start(async (ctx) => {
+/* bot.start(async (ctx) => {
   ctx.reply("Olá! 👋\nEscolha seu plano de assinatura:", {
     reply_markup: {
       inline_keyboard: [
@@ -77,7 +77,7 @@ bot.start(async (ctx) => {
       ],
     },
   });
-});
+}); */
 
 // ======================================================
 // FUNÇÃO PARA CRIAR CHECKOUT
