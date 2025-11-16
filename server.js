@@ -23,6 +23,49 @@ app.use(express.json());
 
 // ======================================================
 // BOT /start
+
+    bot.start(async (ctx) => {
+  const chatId = ctx.chat.id;
+
+  try {
+    // 1️⃣ Enviar imagem
+    await ctx.replyWithPhoto(
+      { url: "https://seu-servidor.com/imagem.jpg" },
+      { caption: "🤖 Bem-vindo ao BOTVIP.CO!" }
+    );
+
+    // 2️⃣ Enviar áudio
+    await ctx.replyWithAudio(
+      { url: "https://seu-servidor.com/audio.mp3" }
+    );
+
+    // 3️⃣ Enviar texto de apresentação
+    await ctx.reply(
+      "👋 Bem-vindo ao *BOTVIP.CO!*\n\n" +
+      "Aqui você encontra ferramentas exclusivas:\n" +
+      "💎 Recursos premium\n" +
+      "⚡ Automação avançada\n" +
+      "🚀 Suporte especializado\n\n" +
+      "Escolha seu plano de assinatura:",
+      { parse_mode: "Markdown" }
+    );
+
+    // 4️⃣ Enviar os planos
+    await ctx.reply("Selecione um plano:", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Plano 1 💎", callback_data: "plano1" }],
+          [{ text: "Plano 2 🔥", callback_data: "plano2" }],
+          [{ text: "Plano 3 🚀", callback_data: "plano3" }]
+        ]
+      }
+    });
+
+  } catch (err) {
+    console.log("Erro ao enviar mensagens:", err);
+  }
+});
+
 // ======================================================
 bot.start(async (ctx) => {
   ctx.reply("Olá! 👋\nEscolha seu plano de assinatura:", {
