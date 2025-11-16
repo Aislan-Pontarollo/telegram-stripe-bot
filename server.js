@@ -12,7 +12,6 @@ const bot = new Telegraf(process.env.TOKEN_TELEGRAM);
 
 // Permitir JSON
 app.use(express.json());
-app.use(bodyParser.raw({ type: "application/json" }));
 
 // ====== BOT COMANDO /start ======
 bot.start(async (ctx) => {
@@ -62,7 +61,7 @@ bot.on("callback_query", async (ctx) => {
 // ====== WEBHOOK STRIPE ======
 app.post(
   "/webhook",
-  bodyParser.raw({ type: "application/json" }),
+  express.raw({ type: "application/json" }),
   (req, res) => {
     const sig = req.headers["stripe-signature"];
 
