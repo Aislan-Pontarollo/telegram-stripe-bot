@@ -34,13 +34,13 @@ bot.start(async (ctx) => {
   try {
     // Enviar imagem (OPCIONAL, mas coloque um link real)
     await ctx.replyWithPhoto(
-      { url: "https://placehold.co/600x400" },
+      { url: "c:\Users\aisla\Downloads\telegram-stripe-bot\assets\im.avif" },
       { caption: "🤖 Bem-vindo ao BOTVIP.CO!" }
     );
 
     // Enviar áudio (OPCIONAL)
     await ctx.replyWithAudio(
-      { url: "https://www2.cs.uic.edu/~i101/SoundFiles/StarWars60.wav" }
+      { url: "assets/three-random-tunes-girl-200030.mp3" }
     );
 
     // Mensagem de apresentação
