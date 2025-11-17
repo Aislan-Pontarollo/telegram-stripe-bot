@@ -10,8 +10,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const bot = new Telegraf(process.env.TOKEN_TELEGRAM);
 
 // ======================================================
-// MIDDLEWARE – MUITO IMPORTANTE
-// O Webhook PRECISA receber req.body em RAW!
+// MIDDLEWARE – RAW BODY APENAS PARA O WEBHOOK DO STRIPE
 // ======================================================
 app.use(
   "/webhook",
@@ -22,23 +21,29 @@ app.use(
 app.use(express.json());
 
 // ======================================================
-// BOT /start
-bot.start(async (ctx) => {
-  const chatId = ctx.chat.id;
+// INICIALIZAR bot.botInfo ANTES DE USAR
+// ======================================================
+await bot.telegram.getMe().then(info => {
+  bot.botInfo = info;
+});
 
+// ======================================================
+// BOT /start
+// ======================================================
+bot.start(async (ctx) => {
   try {
-    // 1️⃣ Enviar imagem
+    // Enviar imagem (OPCIONAL, mas coloque um link real)
     await ctx.replyWithPhoto(
-      { url: "https://seu-servidor.com/imagem.jpg" },
+      { url: "https://placehold.co/600x400" },
       { caption: "🤖 Bem-vindo ao BOTVIP.CO!" }
     );
 
-    // 2️⃣ Enviar áudio
+    // Enviar áudio (OPCIONAL)
     await ctx.replyWithAudio(
-      { url: "https://seu-servidor.com/audio.mp3" }
+      { url: "https://www2.cs.uic.edu/~i101/SoundFiles/StarWars60.wav" }
     );
 
-    // 3️⃣ Enviar texto de apresentação
+    // Mensagem de apresentação
     await ctx.reply(
       "👋 Bem-vindo ao *BOTVIP.CO!*\n\n" +
       "Aqui você encontra ferramentas exclusivas:\n" +
@@ -49,7 +54,7 @@ bot.start(async (ctx) => {
       { parse_mode: "Markdown" }
     );
 
-    // 4️⃣ Enviar os planos
+    // Botões dos planos
     await ctx.reply("Selecione um plano:", {
       reply_markup: {
         inline_keyboard: [
@@ -65,22 +70,8 @@ bot.start(async (ctx) => {
   }
 });
 
-
 // ======================================================
-/* bot.start(async (ctx) => {
-  ctx.reply("Olá! 👋\nEscolha seu plano de assinatura:", {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "Plano 1 💎", callback_data: "plano1" }],
-        [{ text: "Plano 2 🔥", callback_data: "plano2" }],
-        [{ text: "Plano 3 🚀", callback_data: "plano3" }],
-      ],
-    },
-  });
-}); */
-
-// ======================================================
-// FUNÇÃO PARA CRIAR CHECKOUT
+// FUNÇÃO PARA CRIAR CHECKOUT (Corrigida)
 // ======================================================
 async function criarCheckout(priceId, telegramId) {
   return await stripe.checkout.sessions.create({
@@ -94,15 +85,22 @@ async function criarCheckout(priceId, telegramId) {
     metadata: {
       telegram_id: telegramId,
     },
+    subscription_data: {
+      metadata: {
+        telegram_id: telegramId,
+      }
+    },
     success_url: `https://t.me/${bot.botInfo.username}?start=sucesso`,
     cancel_url: `https://t.me/${bot.botInfo.username}?start=cancelado`,
   });
 }
 
 // ======================================================
-// CALLBACK DO BOT (Botões com os planos)
+// CALLBACK DO BOT (Planos)
 // ======================================================
 bot.on("callback_query", async (ctx) => {
+  await ctx.answerCbQuery();
+
   const escolha = ctx.callbackQuery.data;
   const telegramId = ctx.from.id;
 
@@ -119,12 +117,11 @@ bot.on("callback_query", async (ctx) => {
   }
 
   const session = await criarCheckout(priceId, telegramId);
-
   ctx.reply(`Clique no link abaixo para assinar:\n${session.url}`);
 });
 
 // ======================================================
-// WEBHOOK STRIPE
+// WEBHOOK DO STRIPE
 // ======================================================
 app.post("/webhook", (req, res) => {
   let event;
@@ -141,9 +138,7 @@ app.post("/webhook", (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // ---------------------------------------------------
-  // 1️⃣ Checkout Finalizado
-  // ---------------------------------------------------
+  // 1️⃣ Checkout finalizado
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     const telegramId = session.metadata?.telegram_id;
@@ -156,11 +151,11 @@ app.post("/webhook", (req, res) => {
     }
   }
 
-  // ---------------------------------------------------
-  // 2️⃣ Pagamento de assinatura aprovado (evento REAL)
-  // ---------------------------------------------------
+  // 2️⃣ Pagamento aprovado da assinatura
   if (event.type === "invoice.payment_succeeded") {
     const invoice = event.data.object;
+
+    // metadata agora existe por causa da subscription_data
     const telegramId = invoice.metadata?.telegram_id;
 
     if (telegramId) {
@@ -185,4 +180,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
-    
