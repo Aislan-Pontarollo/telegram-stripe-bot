@@ -2,6 +2,8 @@ import express from "express";
 import Stripe from "stripe";
 import { Telegraf } from "telegraf";
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
 
@@ -10,29 +12,29 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const bot = new Telegraf(process.env.TOKEN_TELEGRAM);
 
 // ======================================================
-// RAW BODY APENAS PARA O WEBHOOK STRIPE
+// RAW BODY PARA O WEBHOOK DO STRIPE
 // ======================================================
 app.use("/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 
 // ======================================================
-// INICIALIZAR bot.botInfo SEM TRAVAR O PROCESSO
+// INICIALIZAR bot.botInfo SEM TRAVAR
 // ======================================================
 bot.telegram.getMe().then(info => {
   bot.botInfo = info;
-  console.log("Bot info carregado:", info.username);
+  console.log("Bot carregado como:", info.username);
 }).catch(err => {
-  console.error("Erro ao carregar botInfo:", err);
+  console.error("Erro ao pegar botInfo:", err);
 });
 
 // ======================================================
-// FUNÇÃO SEGURA PARA ENVIAR MÍDIA SEM TRAVAR O BOT
+// FUNÇÃO PARA ENVIAR MÍDIA/MSG SEM TRAVAR O BOT
 // ======================================================
-async function safeSend(ctx, fn, payload, extra = {}) {
+async function safeSend(ctx, method, payload, extra = {}) {
   try {
-    await fn(payload, extra);
+    await method(payload, extra);
   } catch (err) {
-    console.log("⚠️ Erro ao enviar mídia, mas o bot continua rodando:", err.message);
+    console.log("⚠️ Erro ao enviar mídia (ignorado):", err.message);
   }
 }
 
@@ -40,41 +42,42 @@ async function safeSend(ctx, fn, payload, extra = {}) {
 // BOT /start
 // ======================================================
 bot.start(async (ctx) => {
-  const chatId = ctx.chat.id;
+  const audioPath = path.resolve("assets/audio.mp3"); // arquivo local
 
-  // IMAGEM ---------------------------------------------------
+  // Envia imagem (URL pública)
   await safeSend(
     ctx,
     ctx.replyWithPhoto.bind(ctx),
-    { url: "https://MEU-LINK.com/imagem.jpg" },   // ← coloque um link real
+    { url: "assets/im.avif" }, // SUBSTITUA POR UMA URL REAL
     { caption: "🤖 Bem-vindo ao BOTVIP.CO!" }
   );
 
-  // ÁUDIO ----------------------------------------------------
+  // Envia áudio local como arquivo REAL
   await safeSend(
     ctx,
     ctx.replyWithAudio.bind(ctx),
-    { url: "https://MEU-LINK.com/audio.mp3" }     // ← coloque um link real
+    { source: fs.createReadStream(audioPath) }
   );
 
-  // TEXTO ----------------------------------------------------
-  try {
-    await ctx.reply(
-      "👋 Bem-vindo ao *BOTVIP.CO!*\n\n" +
-      "Aqui você encontra ferramentas exclusivas:\n" +
-      "💎 Recursos premium\n" +
-      "⚡ Automação avançada\n" +
-      "🚀 Suporte especializado\n\n" +
-      "Escolha seu plano de assinatura:",
-      { parse_mode: "Markdown" }
-    );
-  } catch (err) {
-    console.log("Erro ao enviar texto: ", err.message);
-  }
+  // Envia texto de apresentação
+  await safeSend(
+    ctx,
+    ctx.reply.bind(ctx),
+    "👋 Bem-vindo ao *BOTVIP.CO!*\n\n" +
+    "Aqui você encontra ferramentas exclusivas:\n" +
+    "💎 Recursos premium\n" +
+    "⚡ Automação avançada\n" +
+    "🚀 Suporte especializado\n\n" +
+    "Escolha seu plano de assinatura:",
+    { parse_mode: "Markdown" }
+  );
 
-  // BOTÕES ---------------------------------------------------
-  try {
-    await ctx.reply("Selecione um plano:", {
+  // Envia botões
+  await safeSend(
+    ctx,
+    ctx.reply.bind(ctx),
+    "Selecione um plano:",
+    {
       reply_markup: {
         inline_keyboard: [
           [{ text: "Plano Semanal", callback_data: "plano1" }],
@@ -82,14 +85,12 @@ bot.start(async (ctx) => {
           [{ text: "Plano Vitalício", callback_data: "plano3" }]
         ]
       }
-    });
-  } catch(err) {
-    console.log("Erro ao enviar botões:", err.message);
-  }
+    }
+  );
 });
 
 // ======================================================
-// FUNÇÃO PARA CRIAR CHECKOUT DO STRIPE
+// FUNÇÃO PARA CRIAR CHECKOUT
 // ======================================================
 async function criarCheckout(priceId, telegramId) {
   return await stripe.checkout.sessions.create({
@@ -111,7 +112,7 @@ async function criarCheckout(priceId, telegramId) {
 }
 
 // ======================================================
-// CALLBACK DOS BOTÕES
+// CALLBACK DOS PLANOS
 // ======================================================
 bot.on("callback_query", async (ctx) => {
   await ctx.answerCbQuery();
@@ -135,13 +136,13 @@ bot.on("callback_query", async (ctx) => {
     const session = await criarCheckout(priceId, telegramId);
     await ctx.reply(`Clique no link abaixo para assinar:\n${session.url}`);
   } catch (err) {
-    ctx.reply("❌ Erro ao criar sessão de pagamento. Tente novamente.");
-    console.error(err);
+    console.error("Erro ao criar checkout:", err);
+    ctx.reply("❌ Erro ao criar pagamento. Tente novamente.");
   }
 });
 
 // ======================================================
-// WEBHOOK STRIPE
+// WEBHOOK DO STRIPE
 // ======================================================
 app.post("/webhook", (req, res) => {
   let event;
@@ -154,14 +155,14 @@ app.post("/webhook", (req, res) => {
       process.env.WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error("❌ Erro ao validar webhook:", err.message);
+    console.error("❌ Erro no webhook:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // CHECKOUT COMPLETO ---------------------------------------
+  // Checkout finalizado
   if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
-    const telegramId = session?.metadata?.telegram_id;
+    const data = event.data.object;
+    const telegramId = data?.metadata?.telegram_id;
 
     if (telegramId) {
       bot.telegram.sendMessage(
@@ -171,7 +172,7 @@ app.post("/webhook", (req, res) => {
     }
   }
 
-  // PAGAMENTO CONFIRMADO ------------------------------------
+  // Pagamento confirmado
   if (event.type === "invoice.payment_succeeded") {
     const invoice = event.data.object;
     const telegramId = invoice?.metadata?.telegram_id;
@@ -179,7 +180,7 @@ app.post("/webhook", (req, res) => {
     if (telegramId) {
       bot.telegram.sendMessage(
         telegramId,
-        "🎉 Pagamento confirmado! Sua assinatura foi ativada com sucesso."
+        "🎉 Pagamento confirmado! Sua assinatura foi ativada!"
       );
     }
   }
@@ -190,9 +191,7 @@ app.post("/webhook", (req, res) => {
 // ======================================================
 // INICIAR BOT + SERVIDOR
 // ======================================================
-bot.launch().then(() => {
-  console.log("🤖 Bot Telegram iniciado!");
-});
+bot.launch().then(() => console.log("🤖 Bot Telegram iniciado!"));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
