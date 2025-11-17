@@ -48,7 +48,7 @@ bot.start(async (ctx) => {
   await safeSend(
     ctx,
     ctx.replyWithPhoto.bind(ctx),
-    { url: "assets/im.jpg" }, // SUBSTITUA POR UMA URL REAL
+    { url: "https://picsum.photos/400/300" }, // SUBSTITUA POR UMA URL REAL
     { caption: "🤖 Bem-vindo ao BOTVIP.CO!" }
   );
 
