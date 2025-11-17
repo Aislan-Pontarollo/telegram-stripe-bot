@@ -10,40 +10,55 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const bot = new Telegraf(process.env.TOKEN_TELEGRAM);
 
 // ======================================================
-// MIDDLEWARE – RAW BODY APENAS PARA O WEBHOOK DO STRIPE
+// RAW BODY APENAS PARA O WEBHOOK STRIPE
 // ======================================================
-app.use(
-  "/webhook",
-  express.raw({ type: "application/json" })
-);
-
-// Para todas as outras rotas → JSON normal
+app.use("/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 
 // ======================================================
-// INICIALIZAR bot.botInfo ANTES DE USAR
+// INICIALIZAR bot.botInfo SEM TRAVAR O PROCESSO
 // ======================================================
-await bot.telegram.getMe().then(info => {
+bot.telegram.getMe().then(info => {
   bot.botInfo = info;
+  console.log("Bot info carregado:", info.username);
+}).catch(err => {
+  console.error("Erro ao carregar botInfo:", err);
 });
+
+// ======================================================
+// FUNÇÃO SEGURA PARA ENVIAR MÍDIA SEM TRAVAR O BOT
+// ======================================================
+async function safeSend(ctx, fn, payload, extra = {}) {
+  try {
+    await fn(payload, extra);
+  } catch (err) {
+    console.log("⚠️ Erro ao enviar mídia, mas o bot continua rodando:", err.message);
+  }
+}
 
 // ======================================================
 // BOT /start
 // ======================================================
 bot.start(async (ctx) => {
+  const chatId = ctx.chat.id;
+
+  // IMAGEM ---------------------------------------------------
+  await safeSend(
+    ctx,
+    ctx.replyWithPhoto.bind(ctx),
+    { url: "https://MEU-LINK.com/imagem.jpg" },   // ← coloque um link real
+    { caption: "🤖 Bem-vindo ao BOTVIP.CO!" }
+  );
+
+  // ÁUDIO ----------------------------------------------------
+  await safeSend(
+    ctx,
+    ctx.replyWithAudio.bind(ctx),
+    { url: "https://MEU-LINK.com/audio.mp3" }     // ← coloque um link real
+  );
+
+  // TEXTO ----------------------------------------------------
   try {
-    // Enviar imagem (OPCIONAL, mas coloque um link real)
-    await ctx.replyWithPhoto(
-      { url: "c:\Users\aisla\Downloads\telegram-stripe-bot\assets\im.avif" },
-      { caption: "🤖 Bem-vindo ao BOTVIP.CO!" }
-    );
-
-    // Enviar áudio (OPCIONAL)
-    await ctx.replyWithAudio(
-      { url: "assets/three-random-tunes-girl-200030.mp3" }
-    );
-
-    // Mensagem de apresentação
     await ctx.reply(
       "👋 Bem-vindo ao *BOTVIP.CO!*\n\n" +
       "Aqui você encontra ferramentas exclusivas:\n" +
@@ -53,8 +68,12 @@ bot.start(async (ctx) => {
       "Escolha seu plano de assinatura:",
       { parse_mode: "Markdown" }
     );
+  } catch (err) {
+    console.log("Erro ao enviar texto: ", err.message);
+  }
 
-    // Botões dos planos
+  // BOTÕES ---------------------------------------------------
+  try {
     await ctx.reply("Selecione um plano:", {
       reply_markup: {
         inline_keyboard: [
@@ -64,14 +83,13 @@ bot.start(async (ctx) => {
         ]
       }
     });
-
-  } catch (err) {
-    console.log("Erro ao enviar mensagens:", err);
+  } catch(err) {
+    console.log("Erro ao enviar botões:", err.message);
   }
 });
 
 // ======================================================
-// FUNÇÃO PARA CRIAR CHECKOUT (Corrigida)
+// FUNÇÃO PARA CRIAR CHECKOUT DO STRIPE
 // ======================================================
 async function criarCheckout(priceId, telegramId) {
   return await stripe.checkout.sessions.create({
@@ -82,21 +100,18 @@ async function criarCheckout(priceId, telegramId) {
         quantity: 1,
       },
     ],
-    metadata: {
-      telegram_id: telegramId,
-    },
     subscription_data: {
       metadata: {
         telegram_id: telegramId,
       }
     },
-    success_url: `https://t.me/${bot.botInfo.username}?start=sucesso`,
-    cancel_url: `https://t.me/${bot.botInfo.username}?start=cancelado`,
+    success_url: `https://t.me/${bot.botInfo?.username}?start=sucesso`,
+    cancel_url: `https://t.me/${bot.botInfo?.username}?start=cancelado`,
   });
 }
 
 // ======================================================
-// CALLBACK DO BOT (Planos)
+// CALLBACK DOS BOTÕES
 // ======================================================
 bot.on("callback_query", async (ctx) => {
   await ctx.answerCbQuery();
@@ -116,12 +131,17 @@ bot.on("callback_query", async (ctx) => {
     return ctx.reply("Erro ao localizar o plano selecionado.");
   }
 
-  const session = await criarCheckout(priceId, telegramId);
-  ctx.reply(`Clique no link abaixo para assinar:\n${session.url}`);
+  try {
+    const session = await criarCheckout(priceId, telegramId);
+    await ctx.reply(`Clique no link abaixo para assinar:\n${session.url}`);
+  } catch (err) {
+    ctx.reply("❌ Erro ao criar sessão de pagamento. Tente novamente.");
+    console.error(err);
+  }
 });
 
 // ======================================================
-// WEBHOOK DO STRIPE
+// WEBHOOK STRIPE
 // ======================================================
 app.post("/webhook", (req, res) => {
   let event;
@@ -138,10 +158,10 @@ app.post("/webhook", (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // 1️⃣ Checkout finalizado
+  // CHECKOUT COMPLETO ---------------------------------------
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    const telegramId = session.metadata?.telegram_id;
+    const telegramId = session?.metadata?.telegram_id;
 
     if (telegramId) {
       bot.telegram.sendMessage(
@@ -151,12 +171,10 @@ app.post("/webhook", (req, res) => {
     }
   }
 
-  // 2️⃣ Pagamento aprovado da assinatura
+  // PAGAMENTO CONFIRMADO ------------------------------------
   if (event.type === "invoice.payment_succeeded") {
     const invoice = event.data.object;
-
-    // metadata agora existe por causa da subscription_data
-    const telegramId = invoice.metadata?.telegram_id;
+    const telegramId = invoice?.metadata?.telegram_id;
 
     if (telegramId) {
       bot.telegram.sendMessage(
