@@ -1,2 +1,14 @@
+# Ignorar arquivos de ambiente
 .env
-node_modules/ls
+.env.*
+*.env
+
+# Ignorar node modules (caso use JS/TS)
+node_modules/
+
+# Ignorar arquivos de log
+*.log
+
+# Ignorar arquivos de build
+dist/
+build/
