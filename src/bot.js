@@ -43,7 +43,6 @@ export function createBot() {
 
     await ctx.reply(
       "👋 Bem-vindo ao *BOTVIP.CO!*\n" +
-        "Aqui você encontra ferramentas premium e automatizações avançadas.\n\n" +
         "Escolha uma opção:",
       {
         parse_mode: "Markdown",
@@ -59,7 +58,7 @@ export function createBot() {
   });
 
   // ==============================
-  // Comando /planos
+  // /planos
   // ==============================
   bot.command("planos", (ctx) => {
     ctx.reply("💳 *Nossos Planos:*", {
@@ -75,7 +74,7 @@ export function createBot() {
   });
 
   // ==============================
-  // Callback dos planos → GERA CHECKOUT
+  // CALLBACKS — PRIMEIRO OS PLANOS
   // ==============================
   bot.on("callback_query", async (ctx) => {
     const data = ctx.callbackQuery.data;
@@ -87,47 +86,57 @@ export function createBot() {
       plano3: process.env.PLANO_3,
     };
 
+    // Se for um dos planos → cria checkout
     if (PREÇOS[data]) {
       try {
         const checkout = await stripe.checkout.sessions.create({
           payment_method_types: ["card"],
           mode: "subscription",
-          line_items: [
-            {
-              price: PREÇOS[data],
-              quantity: 1,
-            },
-          ],
+          line_items: [{ price: PREÇOS[data], quantity: 1 }],
           success_url: "https://t.me/" + process.env.BOT_USERNAME,
           cancel_url: "https://t.me/" + process.env.BOT_USERNAME,
         });
 
-        return ctx.reply(
-          "💳 Clique para finalizar o pagamento:",
-          {
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: "Pagar Agora", url: checkout.url }],
-              ],
-            },
-          }
-        );
+        return ctx.reply("💳 Clique para pagar:", {
+          reply_markup: {
+            inline_keyboard: [[{ text: "Pagar Agora", url: checkout.url }]],
+          },
+        });
       } catch (err) {
         console.log("❌ Erro Stripe:", err);
-        return ctx.reply("❌ Erro ao criar checkout. Tente novamente.");
+        return ctx.reply("❌ Erro ao criar checkout.");
       }
     }
 
-    // Outros menus
-    const menus = {
-      ajuda: "📘 *Ajuda*\nUse /help para ver comandos.",
-      suporte: "🛠 Suporte: @SeuAtendimento",
-    };
-
-    if (menus[data]) {
-      return ctx.reply(menus[data], { parse_mode: "Markdown" });
+    // ==============================
+    // OUTROS MENUS
+    // ==============================
+    if (data === "ver_planos") {
+      return ctx.reply("💳 *Planos disponíveis:*", {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "💎 Plano Semanal", callback_data: "plano1" }],
+            [{ text: "🔥 Plano Mensal", callback_data: "plano2" }],
+            [{ text: "🚀 Plano Vitalício", callback_data: "plano3" }],
+          ],
+        },
+      });
     }
 
+    if (data === "ajuda") {
+      return ctx.reply("📘 *Ajuda*\nUse /help para ver comandos.", {
+        parse_mode: "Markdown",
+      });
+    }
+
+    if (data === "suporte") {
+      return ctx.reply("🛠 Suporte: @SeuAtendimento");
+    }
+
+    // ==============================
+    // SE NADA BATER:
+    // ==============================
     ctx.reply("❌ Opção inválida.");
   });
 
