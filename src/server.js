@@ -2,6 +2,7 @@
 import express from "express";
 import Stripe from "stripe";
 import { createBot } from "./bot.js";
+import { init as initCallbackSystem, stopByPayment } from "./callback.js";
 
 // ---- Config / ENV ----
 // Espera-se que seu .env tenha:
@@ -41,6 +42,13 @@ const app = express();
 
 // ---- Create bot instance (from src/bot.js) ----
 const bot = createBot();
+
+// ---- Initialize callback system singleton with bot ----
+try {
+  initCallbackSystem(bot);
+} catch (err) {
+  console.warn("⚠️ initCallbackSystem warning:", err?.message || err);
+}
 
 // ---- Utility: safe join URL (avoid //) ----
 function joinUrl(base, path) {
@@ -114,6 +122,15 @@ app.post(
 
           if (telegramId) {
             console.log(`✅ checkout.session.completed -> granting access to ${telegramId}`);
+
+            // Stop followups (best-effort) — evita que o usuário continue recebendo mensagens
+            try {
+              await stopByPayment(telegramId);
+            } catch (err) {
+              // não falhar por conta disso
+              console.warn("⚠️ stopByPayment erro (checkout.session.completed):", err?.message || err);
+            }
+
             try {
               await bot.grantAccess(telegramId, {
                 stripeCustomerId: customerId,
@@ -190,6 +207,14 @@ app.post(
 
           if (telegramId) {
             console.log(`🔄 invoice.payment_succeeded -> renew/grant for ${telegramId}`);
+
+            // Stop followups (user renewed)
+            try {
+              await stopByPayment(telegramId);
+            } catch (err) {
+              console.warn("⚠️ stopByPayment erro (invoice.payment_succeeded):", err?.message || err);
+            }
+
             try {
               await bot.grantAccess(telegramId, {
                 stripeCustomerId: customerId,

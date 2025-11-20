@@ -3,19 +3,20 @@ import { Telegraf } from "telegraf";
 import fs from "fs";
 import path from "path";
 import Stripe from "stripe";
+import * as callbackSystem from "./callback.js";
 
 const DATA_DIR = path.resolve("./data");
 const DB_FILE = path.join(DATA_DIR, "subscribers.json");
 
-// ======= ENV expected (use estes nomes no .env) =======
+// ======= ENV expected (use estes names in .env) =======
 // TOKEN_TELEGRAM
 // BOT_USERNAME
 // CHANNEL_ID            (ex: -1001234567890)
-// LOGS_CHAT_ID          (opcional, ex: -1009876543210)
-// SUCCESS_URL           (opcional)
-// CANCEL_URL            (opcional)
+// LOGS_CHAT_ID          (optional, ex: -1009876543210)
+// SUCCESS_URL           (optional)
+// CANCEL_URL            (optional)
 // STRIPE_SECRET_KEY
-// PLANO_1, PLANO_2, PLANO_3
+// PLANO_1, PLANO_2, PLANO_3, PLANO_B (optional)
 // =====================================================
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -88,6 +89,13 @@ export function createBot() {
 
   const bot = new Telegraf(botToken);
 
+  // initialize callbackSystem singleton with this bot
+  try {
+    callbackSystem.init(bot);
+  } catch (err) {
+    console.warn("⚠️ callbackSystem.init warning:", err.message);
+  }
+
   // init DB (async but fire-and-forget)
   ensureDataFile().catch((err) => console.warn("Erro init DB:", err.message));
 
@@ -146,6 +154,12 @@ export function createBot() {
   async function grantAccess(telegramId, { stripeCustomerId = null, subscriptionId = null, priceId = null, current_period_end = null } = {}) {
     try {
       const tId = String(telegramId);
+
+      // Cancel followups immediately (user bought)
+      try {
+        callbackSystem.stopByPayment(tId);
+      } catch (_) {}
+
       const entry = {
         telegramId: tId,
         stripeCustomerId: stripeCustomerId || null,
@@ -284,6 +298,17 @@ export function createBot() {
         });
       }
 
+      // schedule followups from the moment user invoked /start (only for private chats)
+      try {
+        if (ctx.chat && ctx.chat.type === "private") {
+          // reinicia o fluxo toda vez que o usuário der /start (conforme seu pedido)
+          callbackSystem.stopCallbackFlow(ctx.from.id); // garante reset
+          callbackSystem.startCallbackFlow(ctx.from.id);
+        }
+      } catch (err) {
+        console.warn("⚠️ erro ao agendar followup no /start:", err.message);
+      }
+
       const greeting = `👋 Olá, *${ctx.from.first_name || "amigo"}*! Bem-vindo.\nEscolha abaixo:`;
       const keyboard = {
         parse_mode: "Markdown",
@@ -296,7 +321,7 @@ export function createBot() {
         },
       };
 
-      const isSub = isSubscriber(String(ctx.from.id));
+      const isSub = isSubscriberObj(String(ctx.from.id));
       if (isSub) {
         await ctx.reply(greeting + `\n\n✅ Você tem assinatura ativa. Use "🔐 Acessar Canal VIP" para receber seu link (novamente).`, keyboard);
       } else {
@@ -420,6 +445,14 @@ export function createBot() {
   bot.getSubscriber = getSubscriber;
   bot.getAllSubscribers = getAllSubscribers;
   bot.createCheckoutSession = createCheckoutSession;
+
+  // Expor callbackSystem util para debug/uso externo (server.js pode chamar se quiser)
+  bot.callbackSystem = {
+    start: callbackSystem.startCallbackFlow,
+    stop: callbackSystem.stopCallbackFlow,
+    stopByPayment: callbackSystem.stopByPayment,
+    getPending: callbackSystem.getPending,
+  };
 
   return bot;
 }
