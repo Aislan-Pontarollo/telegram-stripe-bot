@@ -8,7 +8,7 @@ const MS = {
 };
 
 // default timings — edite se necessário
-const FIRST_DELAY_MS = 5 * MS.minute; // 5 minutos
+const FIRST_DELAY_MS = 0.5 * MS.minute; // 5 minutos
 const DAY_DELAY_MS = 1 * MS.day; // 24 horas
 const MAX_SENDS = 3; // total de envios: 5min + day1 + day2
 
