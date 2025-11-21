@@ -13,7 +13,7 @@ const DAY_DELAY_MS = 0.5 * MS.day; // 12 horas
 const MAX_SENDS = 5;
 
 // Mensagens padrão
-const DEFAULT_MESSAGE_A = `👋 Ei! Vi que você começou aqui no BOTVIP e deu uma olhada nas ofertas, mas não finalizou a compra. Posso tirar alguma dúvida rápida pra você?`;
+const DEFAULT_MESSAGE_A = `👋 Ei! Vii que você começou aqui no BOTVIP e deu uma olhada nas ofertas, mas não finalizou a compra. Posso tirar alguma dúvida rápida pra você?`;
 const DEFAULT_MESSAGE_B = `Olá de novo! Só passando pra lembrar das vantagens do plano VIP: conteúdo exclusivo, atualizações e suporte. Quer que eu envie o link novamente ou prefere a opção de uma call rápida para tirar dúvidas?`;
 
 const PRICE_B = process.env.PLANO_B;
