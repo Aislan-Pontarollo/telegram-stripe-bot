@@ -115,24 +115,33 @@ export function createBot() {
   // UTIL: gerar checkout session (Stripe)
   // Recebe telegramId e priceId
   // ==============================
-  async function createCheckoutSession({ telegramId, priceId }) {
-    if (!priceId) throw new Error("priceId é obrigatório para criar checkout");
 
-    const successUrl = process.env.SUCCESS_URL || `https://t.me/${process.env.BOT_USERNAME}`;
-    const cancelUrl = process.env.CANCEL_URL || `https://t.me/${process.env.BOT_USERNAME}`;
+async function createCheckoutSession({ telegramId, priceId, mode }) {
+  if (!priceId) throw new Error("priceId é obrigatório para criar checkout");
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "subscription",
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: successUrl + "?session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: cancelUrl,
-      client_reference_id: String(telegramId),
-      metadata: { telegram_id: String(telegramId), price_id: priceId },
-    });
+  const successUrl = process.env.SUCCESS_URL || `https://t.me/${process.env.BOT_USERNAME}`;
+  const cancelUrl = process.env.CANCEL_URL || `https://t.me/${process.env.BOT_USERNAME}`;
 
-    return session;
+  // detecta automaticamente se o preço é recorrente
+  let finalMode = mode;
+  if (!finalMode) {
+    const priceObj = await stripe.prices.retrieve(priceId);
+    finalMode = priceObj.recurring ? "subscription" : "payment";
   }
+
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ["card"],
+    mode: finalMode,
+    line_items: [{ price: priceId, quantity: 1 }],
+    success_url: successUrl + "?session_id={CHECKOUT_SESSION_ID}",
+    cancel_url: cancelUrl,
+    client_reference_id: String(telegramId),
+    metadata: { telegram_id: String(telegramId), price_id: priceId },
+  });
+
+  return session;
+}
+
 
   // ==============================
   // Geração de invite link único (1 uso)
@@ -402,7 +411,11 @@ export function createBot() {
     if (PRICES[data]) {
       const priceId = PRICES[data];
       try {
-        const session = await createCheckoutSession({ telegramId: ctx.from.id, priceId });
+        const session = await createCheckoutSession({
+          telegramId: ctx.from.id,
+          priceId,
+          mode: data === "plano_vitalicio" ? "payment" : "subscription",
+            });
         return ctx.reply("💳 Clique para pagar:", {
           reply_markup: {
             inline_keyboard: [[{ text: "Pagar Agora", url: session.url }]],
