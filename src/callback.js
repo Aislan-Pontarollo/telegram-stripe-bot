@@ -52,7 +52,7 @@ async function checkoutKeyboardForId(id) {
   // 1) tenta criar Checkout Session via util do bot (melhor opção)
   if (PRICE_B && botInstance && typeof botInstance.createCheckoutSession === "function") {
     try {
-      const session = await botInstance.createCheckoutSession({ telegramId: id, priceId: PRICE_B });
+      const session = await botInstance.createCheckoutSession({ telegramId: id, priceId: PRICE_B, mode: "payment"});
       if (session && session.url) {
         return {
           reply_markup: {
