@@ -8,7 +8,7 @@ const MS = {
 };
 
 // default timings — edite se necessário
-const FIRST_DELAY_MS = 0.05 * MS.minute; // 3 minutos
+const FIRST_DELAY_MS = 0.05 * MS.minute; // 3 minutos (ajuste se quiser)
 const DAY_DELAY_MS = 0.5 * MS.day; // 12 horas
 const MAX_SENDS = 5;
 
@@ -43,6 +43,73 @@ function _clearEntry(entry) {
   if (entry.intervalId) clearInterval(entry.intervalId);
 }
 
+/**
+ * Gera o teclado com link de checkout.
+ * Tenta criar uma Stripe Checkout Session usando botInstance.createCheckoutSession.
+ * Se não for possível, retorna um fallback que usa WEBHOOK_URL (como anteriormente).
+ */
+async function checkoutKeyboardForId(id) {
+  // 1) tenta criar Checkout Session via util do bot (melhor opção)
+  if (PRICE_B && botInstance && typeof botInstance.createCheckoutSession === "function") {
+    try {
+      const session = await botInstance.createCheckoutSession({ telegramId: id, priceId: PRICE_B });
+      if (session && session.url) {
+        return {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: "💳 Comprar Plano VIP", url: session.url }
+              ]
+            ]
+          }
+        };
+      } else {
+        console.warn("callback: createCheckoutSession não retornou session.url, fallback para WEBHOOK_URL");
+      }
+    } catch (err) {
+      console.warn("⚠️ Erro ao criar Checkout Session (callback):", err?.message || err);
+      // prossegue para fallback abaixo
+    }
+  } else {
+    if (!PRICE_B) console.warn("⚠️ PLANO_B não configurado (process.env.PLANO_B)");
+    if (!botInstance || typeof botInstance.createCheckoutSession !== "function") {
+      console.warn("⚠️ botInstance.createCheckoutSession não disponível - usando fallback de URL");
+    }
+  }
+
+  // 2) fallback: usa WEBHOOK_URL /checkout?price=... (comportamento antigo)
+  const webhookUrl = process.env.WEBHOOK_URL || "";
+  if (webhookUrl && PRICE_B) {
+    const url = `${webhookUrl.replace(/\/+$/, "")}/checkout?price=${encodeURIComponent(PRICE_B)}&telegramId=${encodeURIComponent(id)}`;
+    return {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "💳 Comprar Plano VIP", url }
+          ]
+        ]
+      }
+    };
+  }
+
+  // 3) fallback final: botão genérico apontando para o username do bot (se configurado)
+  const botUser = process.env.BOT_USERNAME ? `https://t.me/${process.env.BOT_USERNAME}` : null;
+  if (botUser) {
+    return {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "💳 Comprar Plano VIP", url: botUser }
+          ]
+        ]
+      }
+    };
+  }
+
+  // 4) se não há nada, retorna um keyboard vazio (sem botão)
+  return { reply_markup: { inline_keyboard: [] } };
+}
+
 export function startCallbackFlow(rawId, opts = {}) {
   ensureBot();
   const id = _key(rawId);
@@ -74,21 +141,7 @@ export function startCallbackFlow(rawId, opts = {}) {
 
     const logsChat = process.env.LOGS_CHAT_ID || null;
 
-    // 🔥 BOTÃO DE COMPRA
-    function checkoutKeyboard() {
-      return {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "💳 Comprar Plano VIP",
-                url: `${process.env.WEBHOOK_URL}/checkout?price=${PRICE_B}&telegramId=${id}`
-              }
-            ]
-          ]
-        }
-      };
-    }
+    // 🔥 NOTE: checkoutKeyboard() agora é assíncrono e criado via checkoutKeyboardForId
 
     // 1ª mensagem
     const t1 = setTimeout(async () => {
@@ -96,7 +149,8 @@ export function startCallbackFlow(rawId, opts = {}) {
         const isSub = botInstance.isSubscriber ? await safeIsSubscriber(botInstance, id) : false;
         if (isSub) return stopCallbackFlow(id);
 
-        await botInstance.telegram.sendMessage(id, messageA, checkoutKeyboard());
+        const keyboard = await checkoutKeyboardForId(id);
+        await botInstance.telegram.sendMessage(id, messageA, keyboard);
         entry.sentCount++;
       } catch (err) {
         console.warn("callback t1 error:", err.message);
@@ -111,7 +165,8 @@ export function startCallbackFlow(rawId, opts = {}) {
         if (isSub) return stopCallbackFlow(id);
 
         if (entry.sentCount < MAX_SENDS) {
-          await botInstance.telegram.sendMessage(id, messageB, checkoutKeyboard());
+          const keyboard = await checkoutKeyboardForId(id);
+          await botInstance.telegram.sendMessage(id, messageB, keyboard);
           entry.sentCount++;
         }
       } catch (err) {
@@ -127,7 +182,8 @@ export function startCallbackFlow(rawId, opts = {}) {
         if (isSub) return stopCallbackFlow(id);
 
         if (entry.sentCount < MAX_SENDS) {
-          await botInstance.telegram.sendMessage(id, messageA, checkoutKeyboard());
+          const keyboard = await checkoutKeyboardForId(id);
+          await botInstance.telegram.sendMessage(id, messageA, keyboard);
           entry.sentCount++;
         }
       } catch (err) {

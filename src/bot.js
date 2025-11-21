@@ -366,6 +366,7 @@ export function createBot() {
       plano_semanal: process.env.PLANO_1,
       plano_mensal: process.env.PLANO_2,
       plano_vitalicio: process.env.PLANO_3,
+      plano_b: process.env.PLANO_B,
     };
 
     if (data === "ver_planos") {
